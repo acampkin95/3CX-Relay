@@ -5,12 +5,51 @@ Secure relay module for 3CX V20 U7 phone system with real-time call event stream
 ## Features
 
 - **Real-time Call Events**: WebSocket streaming of 3CX call events
-- **Database Integration**: Read-only access to 3CX PostgreSQL database
+- **Database Integration**: Read-only access to 3CX PostgreSQL database with connection pooling
 - **XAPI Integration**: OAuth2-authenticated REST API access to 3CX
 - **Admin Dashboard**: Web-based management interface
 - **API Key Management**: Secure external client authentication
 - **Health Monitoring**: Connection status and error tracking
 - **Modular Architecture**: Independent components with isolated error handling
+- **Production Optimized**: Resource limits, caching, compression, and security hardening
+
+## Production Features
+
+### Performance Optimizations
+- **Redis Caching**: Optional caching layer for active calls, API keys, and statistics
+  - Gracefully degrades if Redis is unavailable
+  - Configurable TTLs for different data types
+  - Reduces database load and improves response times
+- **Database Connection Pooling**: PostgreSQL connection pool (10 max connections)
+  - Automatic connection management and recycling
+  - Pool statistics monitoring
+  - Optimized for 3CX server compatibility
+- **Response Compression**: Gzip compression for all HTTP responses
+- **Performance Indexes**: Composite and GIN indexes for common query patterns
+  - Optimized for time-range queries
+  - JSONB column indexing for faster JSON queries
+
+### Security Hardening
+- **Helmet Security Headers**: CSP, XSS protection, and security headers
+- **Input Validation**: Joi schema validation on all API endpoints
+- **Rate Limiting**: Authentication and API key generation endpoints
+- **Bcrypt Password Hashing**: 12 rounds for admin passwords
+- **JWT Authentication**: Secure session management with HttpOnly cookies
+- **Dedicated Service User**: Runs as isolated system user (3cxrelay)
+
+### Reliability & Monitoring
+- **Structured Logging**: Winston with daily log rotation
+  - Separate error and combined logs
+  - JSON format for log aggregation
+  - Component-based logging
+  - HTTP request logging
+- **Resource Limits**: Systemd limits prevent impact on 3CX
+  - Memory: 512MB limit (768MB max)
+  - CPU: 50% of one core
+  - Tasks: 256 concurrent tasks
+- **Graceful Shutdown**: Proper cleanup of connections and resources
+- **Health Checks**: Comprehensive health endpoint with cache and pool stats
+- **Automated Testing**: Jest test framework with 70% coverage threshold
 
 ## Prerequisites
 
@@ -97,6 +136,12 @@ npm start
 | `PORT` | Server port | 8082 |
 | `HOST` | Bind address | 127.0.0.1 |
 | `NODE_ENV` | Environment | production |
+| `LOG_LEVEL` | Logging level (error/warn/info/debug) | info |
+| `ALLOWED_ORIGINS` | CORS allowed origins (comma-separated) | http://localhost:8082 |
+| `REDIS_ENABLED` | Enable Redis caching | true |
+| `REDIS_HOST` | Redis server host | localhost |
+| `REDIS_PORT` | Redis server port | 6379 |
+| `REDIS_PASSWORD` | Redis password | - |
 
 ### Database Configuration
 
@@ -112,7 +157,42 @@ DB_PORT=5480
 DB_NAME=phonesystem
 DB_USER=logsreader
 DB_PASSWORD=your_password
+DB_POOL_MAX=10
+DB_POOL_MIN=2
+DB_IDLE_TIMEOUT=30000
+DB_CONNECT_TIMEOUT=5000
 ```
+
+### Redis Configuration (Optional)
+
+Redis caching is optional but recommended for production. The service gracefully degrades if Redis is unavailable.
+
+**Install Redis on 3CX server:**
+```bash
+apt-get install redis-server
+systemctl enable redis-server
+systemctl start redis-server
+```
+
+**Configure in `.env`:**
+```env
+REDIS_ENABLED=true
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+```
+
+**Disable caching:**
+```env
+REDIS_ENABLED=false
+```
+
+**Cache TTL Configuration:**
+- Active calls: 5 seconds
+- Connection status: 5 seconds
+- API key validation: 60 seconds
+- Error statistics: 30 seconds
+- Pool statistics: 10 seconds
 
 ### Nginx Configuration
 
@@ -243,7 +323,9 @@ SELECT cleanup_old_records();
 ├── bin/
 │   └── relay-service.js      # Main entry point
 ├── lib/
-│   ├── database.js           # PostgreSQL client
+│   ├── database.js           # PostgreSQL connection pool
+│   ├── cache-manager.js      # Redis cache manager
+│   ├── logger.js             # Winston logging
 │   ├── xapi-client.js        # XAPI OAuth2 client
 │   ├── callcontrol-ws.js     # WebSocket manager
 │   ├── admin-auth.js         # Authentication
@@ -254,15 +336,23 @@ SELECT cleanup_old_records();
 ├── routes/
 │   └── admin-routes.js       # Admin API routes
 ├── middleware/
-│   └── auth-middleware.js    # JWT middleware
+│   ├── auth-middleware.js    # JWT middleware
+│   └── validation.js         # Joi validation middleware
 ├── views/
 │   ├── login.ejs            # Login page
 │   └── dashboard.ejs        # Admin dashboard
 ├── public/                   # Static assets
-├── config/                   # Configuration files
-├── tests/                    # Test files
-├── schema.sql               # Database schema
-├── install.sh               # Auto-deploy script
+├── tests/
+│   └── unit/                # Unit tests
+│       ├── error-tracker.test.js
+│       └── api-key-manager.test.js
+├── logs/                     # Application logs
+│   ├── error-*.log          # Error logs (daily rotation)
+│   └── combined-*.log       # Combined logs (daily rotation)
+├── schema.sql               # Database schema with indexes
+├── install.sh               # Auto-deploy script (3CX optimized)
+├── jest.config.js           # Test configuration
+├── .env.example             # Environment template
 └── package.json
 ```
 

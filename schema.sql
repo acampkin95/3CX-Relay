@@ -31,6 +31,9 @@ CREATE TABLE IF NOT EXISTS api_keys (
 CREATE INDEX IF NOT EXISTS idx_api_keys_active ON api_keys(active);
 CREATE INDEX IF NOT EXISTS idx_api_keys_client_name ON api_keys(client_name);
 
+-- GIN index for JSONB permissions column
+CREATE INDEX IF NOT EXISTS idx_api_keys_permissions_gin ON api_keys USING GIN (permissions);
+
 -- API Requests Table (for usage tracking)
 CREATE TABLE IF NOT EXISTS api_requests (
   id SERIAL PRIMARY KEY,
@@ -44,7 +47,11 @@ CREATE TABLE IF NOT EXISTS api_requests (
 
 -- Create indexes on api_requests
 CREATE INDEX IF NOT EXISTS idx_api_requests_api_key_id ON api_requests(api_key_id);
-CREATE INDEX IF NOT EXISTS idx_api_requests_timestamp ON api_requests(timestamp);
+CREATE INDEX IF NOT EXISTS idx_api_requests_timestamp ON api_requests(timestamp DESC);
+
+-- Composite indexes for api_requests analytics
+CREATE INDEX IF NOT EXISTS idx_api_requests_key_time ON api_requests(api_key_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_api_requests_endpoint_time ON api_requests(endpoint, timestamp DESC);
 
 -- Error Log Table
 CREATE TABLE IF NOT EXISTS error_log (
@@ -60,10 +67,17 @@ CREATE TABLE IF NOT EXISTS error_log (
 );
 
 -- Create indexes on error_log
-CREATE INDEX IF NOT EXISTS idx_error_log_timestamp ON error_log(timestamp);
+CREATE INDEX IF NOT EXISTS idx_error_log_timestamp ON error_log(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_error_log_component ON error_log(component);
 CREATE INDEX IF NOT EXISTS idx_error_log_severity ON error_log(severity);
 CREATE INDEX IF NOT EXISTS idx_error_log_acknowledged ON error_log(acknowledged);
+
+-- Composite indexes for common query patterns
+CREATE INDEX IF NOT EXISTS idx_error_log_comp_sev_time ON error_log(component, severity, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_error_log_ack_time ON error_log(acknowledged, timestamp DESC);
+
+-- GIN index for JSONB details column for faster JSON queries
+CREATE INDEX IF NOT EXISTS idx_error_log_details_gin ON error_log USING GIN (details);
 
 -- Connection Status History Table
 CREATE TABLE IF NOT EXISTS connection_status_history (

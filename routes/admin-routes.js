@@ -1,6 +1,7 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const createAuthMiddleware = require('../middleware/auth-middleware');
+const { schemas, validateBody, validateQuery, validateParams } = require('../middleware/validation');
 
 /**
  * Create admin routes
@@ -35,16 +36,9 @@ function createAdminRoutes(adminAuth, apiKeyManager, connectionMonitor, errorTra
   /**
    * POST /admin/login - Authenticate admin user
    */
-  router.post('/login', loginLimiter, async (req, res) => {
+  router.post('/login', loginLimiter, validateBody(schemas.login), async (req, res) => {
     try {
       const { username, password } = req.body;
-      
-      if (!username || !password) {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'Username and password required' 
-        });
-      }
 
       const result = await adminAuth.login(username, password);
       
